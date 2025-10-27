@@ -1048,9 +1048,10 @@ def prune_wanda_hybrid_2_4(
     model.config.use_cache = False
 
     print("="*80)
-    print("Loading calibration data...")
+    print("Loading calibration data (WikiText2)...")
     print("="*80)
-    dataloader, _ = get_loaders("wikitext", nsamples=args.nsamples, seed=args.seed, seqlen=model.seqlen, tokenizer=tokenizer)
+    dataloader, _ = get_loaders("wikitext2", nsamples=args.nsamples, seed=args.seed, seqlen=model.seqlen, tokenizer=tokenizer)
+    print("Dataset loading complete\n")
 
     print("="*80)
     print("Starting hybrid block pruning with 2:4 sparsity...")
