@@ -316,9 +316,17 @@ def main():
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
-    raw_datasets = load_dataset(
-        'allenai/c4', 'allenai--c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz', 'validation': 'en/c4-validation.00000-of-00008.json.gz'}
-    )
+    # Load dataset based on data_args
+    if data_args.dataset_name == 'c4':
+        raw_datasets = load_dataset(
+            'allenai/c4', 'allenai--c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz', 'validation': 'en/c4-validation.00000-of-00008.json.gz'}
+        )
+    else:
+        # For other datasets like wikitext
+        raw_datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+        )
 
     if "validation" not in raw_datasets.keys():
         raw_datasets["validation"] = load_dataset(
@@ -367,6 +375,14 @@ def main():
             cache_dir=model_args.cache_dir,
             padding_side="right",
             use_fast=True,
+        )
+    else:
+        # For other models, use the config tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.config_name,
+            cache_dir=model_args.cache_dir,
+            padding_side="right",
+            use_fast=False,
         )
 
     model = AutoModelForCausalLM.from_pretrained(model_args.model_name_or_path, torch_dtype=torch.float16, cache_dir=model_args.cache_dir, low_cpu_mem_usage=True, device_map="auto")

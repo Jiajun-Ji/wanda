@@ -399,3 +399,436 @@ def prune_ablate(args, model, tokenizer, dev, prune_n=0, prune_m=0):
 
     model.config.use_cache = use_cache
     torch.cuda.empty_cache()
+
+
+# ============================================================================
+# Block-wise Pruning Functions (16x16 structured pruning)
+# ============================================================================
+
+def compute_block_scores(W_metric, block_size=16):
+    """
+    Divide the weight score matrix into blocks and compute average score for each block.
+
+    Args:
+        W_metric: Weight score matrix [M, N]
+        block_size: Block size, default 16
+
+    Returns:
+        block_scores: Block score matrix [num_blocks_row, num_blocks_col]
+        num_blocks_row: Number of blocks in row dimension
+        num_blocks_col: Number of blocks in column dimension
+    """
+    M, N = W_metric.shape
+    num_blocks_row = (M + block_size - 1) // block_size
+    num_blocks_col = (N + block_size - 1) // block_size
+
+    block_scores = torch.zeros(num_blocks_row, num_blocks_col,
+                               device=W_metric.device, dtype=W_metric.dtype)
+
+    for i in range(num_blocks_row):
+        for j in range(num_blocks_col):
+            row_start = i * block_size
+            row_end = min((i + 1) * block_size, M)
+            col_start = j * block_size
+            col_end = min((j + 1) * block_size, N)
+
+            block = W_metric[row_start:row_end, col_start:col_end]
+            block_scores[i, j] = block.mean()  # Use mean to handle variable block sizes
+
+    return block_scores, num_blocks_row, num_blocks_col
+
+
+def apply_block_pruning(W, W_metric, sparsity_ratio, block_size=16):
+    """
+    Apply block-wise pruning based on block scores.
+
+    Args:
+        W: Weight matrix [M, N]
+        W_metric: Weight score matrix [M, N]
+        sparsity_ratio: Sparsity ratio (by number of blocks)
+        block_size: Block size, default 16
+
+    Returns:
+        W_mask: Pruning mask (True = prune, False = keep)
+        actual_sparsity: Actual sparsity achieved
+    """
+    M, N = W.shape
+
+    # Compute block scores
+    block_scores, num_blocks_row, num_blocks_col = compute_block_scores(W_metric, block_size)
+
+    # Determine number of blocks to prune
+    total_blocks = num_blocks_row * num_blocks_col
+    num_blocks_to_prune = int(total_blocks * sparsity_ratio)
+
+    # Find threshold: prune blocks with lowest scores
+    flat_scores = block_scores.flatten()
+    if num_blocks_to_prune > 0 and num_blocks_to_prune < total_blocks:
+        threshold = torch.topk(flat_scores, num_blocks_to_prune, largest=False)[0][-1]
+    elif num_blocks_to_prune >= total_blocks:
+        threshold = float('inf')  # Prune all
+    else:
+        threshold = float('-inf')  # Prune none
+
+    # Create mask
+    W_mask = torch.zeros_like(W, dtype=torch.bool)
+    total_pruned = 0
+    total_elements = W.numel()
+
+    for i in range(num_blocks_row):
+        for j in range(num_blocks_col):
+            if block_scores[i, j] <= threshold:
+                row_start = i * block_size
+                row_end = min((i + 1) * block_size, M)
+                col_start = j * block_size
+                col_end = min((j + 1) * block_size, N)
+
+                W_mask[row_start:row_end, col_start:col_end] = True
+                total_pruned += (row_end - row_start) * (col_end - col_start)
+
+    actual_sparsity = total_pruned / total_elements
+
+    return W_mask, actual_sparsity
+
+
+def apply_block_pruning_with_topk(W, W_metric, sparsity_ratio, block_size=16, topk_per_block=10):
+    """
+    Apply block-wise pruning with top-k preservation within pruned blocks.
+
+    Strategy:
+    1. Compute block scores and select blocks to prune
+    2. For pruned blocks: keep only top-k largest weights (by absolute value)
+    3. For unpruned blocks: keep all weights
+
+    Args:
+        W: Weight matrix
+        W_metric: Importance metric matrix (same shape as W)
+        sparsity_ratio: Target sparsity ratio (0-1)
+        block_size: Block size (default: 16)
+        topk_per_block: Number of weights to keep in each pruned block (default: 10)
+
+    Returns:
+        W_mask: Pruning mask (True = prune, False = keep)
+        actual_sparsity: Actual sparsity achieved
+    """
+    M, N = W.shape
+
+    # Compute block scores
+    block_scores, num_blocks_row, num_blocks_col = compute_block_scores(W_metric, block_size)
+
+    # Determine number of blocks to prune
+    total_blocks = num_blocks_row * num_blocks_col
+    num_blocks_to_prune = int(total_blocks * sparsity_ratio)
+
+    # Find threshold: prune blocks with lowest scores
+    flat_scores = block_scores.flatten()
+    if num_blocks_to_prune > 0 and num_blocks_to_prune < total_blocks:
+        threshold = torch.topk(flat_scores, num_blocks_to_prune, largest=False)[0][-1]
+    elif num_blocks_to_prune >= total_blocks:
+        threshold = float('inf')  # Prune all
+    else:
+        threshold = float('-inf')  # Prune none
+
+    # Create mask
+    W_mask = torch.zeros_like(W, dtype=torch.bool)
+    total_pruned = 0
+    total_elements = W.numel()
+
+    for i in range(num_blocks_row):
+        for j in range(num_blocks_col):
+            row_start = i * block_size
+            row_end = min((i + 1) * block_size, M)
+            col_start = j * block_size
+            col_end = min((j + 1) * block_size, N)
+
+            if block_scores[i, j] <= threshold:
+                # This block is selected for pruning
+                # Extract the block
+                block = W[row_start:row_end, col_start:col_end]
+                block_size_actual = block.numel()
+
+                # Keep top-k weights by absolute value
+                if block_size_actual > topk_per_block:
+                    # Flatten block and find top-k indices
+                    block_flat = block.flatten()
+                    block_abs = torch.abs(block_flat)
+
+                    # Get indices of top-k largest weights
+                    _, topk_indices = torch.topk(block_abs, min(topk_per_block, block_size_actual), largest=True)
+
+                    # Create block mask (True = prune)
+                    block_mask = torch.ones(block_size_actual, dtype=torch.bool, device=W.device)
+                    block_mask[topk_indices] = False  # Keep top-k
+
+                    # Reshape and assign to W_mask
+                    block_mask_2d = block_mask.reshape(block.shape)
+                    W_mask[row_start:row_end, col_start:col_end] = block_mask_2d
+
+                    # Count pruned elements
+                    total_pruned += block_mask.sum().item()
+                else:
+                    # Block is smaller than topk, keep all
+                    pass
+            # else: block is not selected for pruning, keep all (mask remains False)
+
+    actual_sparsity = total_pruned / total_elements
+
+    return W_mask, actual_sparsity
+
+
+def prune_wanda_block(args, model, tokenizer, device=torch.device("cuda:0"), block_size=16):
+    """
+    Prune model using Wanda method with block-wise structured pruning.
+
+    Args:
+        args: Arguments containing sparsity_ratio, nsamples, seed, etc.
+        model: Model to prune
+        tokenizer: Tokenizer
+        device: Device to use
+        block_size: Block size for structured pruning (default: 16)
+    """
+    use_cache = model.config.use_cache
+    model.config.use_cache = False
+
+    print("="*80)
+    print(f"Wanda Block Pruning (Block Size: {block_size}x{block_size})")
+    print("="*80)
+    print(f"Target sparsity: {args.sparsity_ratio*100:.2f}%")
+    print(f"Block size: {block_size}x{block_size}")
+    print("="*80)
+
+    print("\nLoading calibration data (WikiText2)...")
+    dataloader, _ = get_loaders(
+        "wikitext2",
+        nsamples=args.nsamples,
+        seed=args.seed,
+        seqlen=model.seqlen,
+        tokenizer=tokenizer
+    )
+    print("Dataset loading complete\n")
+
+    with torch.no_grad():
+        inps, outs, attention_mask, position_ids = prepare_calibration_input(
+            model, dataloader, device
+        )
+
+    layers = model.model.layers
+
+    # Track overall statistics
+    total_params = 0
+    total_pruned = 0
+
+    for i in range(len(layers)):
+        layer = layers[i]
+        subset = find_layers(layer)
+
+        if f"model.layers.{i}" in model.hf_device_map:
+            dev = model.hf_device_map[f"model.layers.{i}"]
+            inps = inps.to(dev)
+            outs = outs.to(dev)
+            attention_mask = attention_mask.to(dev)
+            position_ids = position_ids.to(dev)
+
+        # Wrap layers to collect activation statistics
+        wrapped_layers = {}
+        for name in subset:
+            wrapped_layers[name] = WrappedGPT(subset[name])
+
+        def add_batch(name):
+            def tmp(_, inp, out):
+                wrapped_layers[name].add_batch(inp[0].data, out.data)
+            return tmp
+
+        handles = []
+        for name in wrapped_layers:
+            handles.append(subset[name].register_forward_hook(add_batch(name)))
+
+        # Forward pass to collect activation statistics
+        for j in range(args.nsamples):
+            with torch.no_grad():
+                outs[j] = layer(
+                    inps[j].unsqueeze(0),
+                    attention_mask=attention_mask,
+                    position_ids=position_ids
+                )[0]
+
+        for h in handles:
+            h.remove()
+
+        # Apply block pruning to each sublayer
+        print(f"\n{'='*80}")
+        print(f"Pruning Layer {i}")
+        print(f"{'='*80}")
+
+        for name in subset:
+            W = subset[name].weight.data
+
+            # Calculate Wanda score: |W| * sqrt(activation_norm)
+            W_metric = torch.abs(W) * torch.sqrt(
+                wrapped_layers[name].scaler_row.reshape((1, -1))
+            )
+
+            # Apply block pruning
+            W_mask, actual_sparsity = apply_block_pruning(
+                W, W_metric, args.sparsity_ratio, block_size
+            )
+
+            # Set pruned weights to zero
+            subset[name].weight.data[W_mask] = 0
+
+            # Statistics
+            num_params = W.numel()
+            num_pruned = W_mask.sum().item()
+            total_params += num_params
+            total_pruned += num_pruned
+
+            print(f"  {name}:")
+            print(f"    - Shape: {list(W.shape)}")
+            print(f"    - Total params: {num_params:,}")
+            print(f"    - Pruned params: {num_pruned:,}")
+            print(f"    - Actual sparsity: {actual_sparsity*100:.4f}%")
+            print(f"    - Target sparsity: {args.sparsity_ratio*100:.2f}%")
+
+        # Update inputs for next layer
+        for j in range(args.nsamples):
+            with torch.no_grad():
+                outs[j] = layer(
+                    inps[j].unsqueeze(0),
+                    attention_mask=attention_mask,
+                    position_ids=position_ids
+                )[0]
+        inps, outs = outs, inps
+
+    model.config.use_cache = use_cache
+    torch.cuda.empty_cache()
+
+
+def prune_wanda_block_topk(args, model, tokenizer, device=torch.device("cuda:0"), block_size=16, topk_per_block=10):
+    """
+    Prune model using Wanda method with block-wise pruning + top-k preservation.
+
+    Strategy:
+    - Select blocks to prune based on block-level scores
+    - Within pruned blocks, keep only top-k largest weights
+    - Unpruned blocks remain fully dense
+
+    Args:
+        args: Arguments containing sparsity_ratio, nsamples, seed, etc.
+        model: Model to prune
+        tokenizer: Tokenizer
+        device: Device to use
+        block_size: Block size for structured pruning (default: 16)
+        topk_per_block: Number of weights to keep in each pruned block (default: 10)
+    """
+    use_cache = model.config.use_cache
+    model.config.use_cache = False
+
+    print("="*80)
+    print(f"Wanda Block Pruning with Top-K Preservation")
+    print("="*80)
+    print(f"Target sparsity: {args.sparsity_ratio*100:.2f}%")
+    print(f"Block size: {block_size}x{block_size}")
+    print(f"Top-K per pruned block: {topk_per_block}")
+    print("="*80)
+
+    print("\nLoading calibration data (WikiText2)...")
+    dataloader, _ = get_loaders(
+        "wikitext2",
+        nsamples=args.nsamples,
+        seed=args.seed,
+        seqlen=model.seqlen,
+        tokenizer=tokenizer
+    )
+    print("Dataset loading complete\n")
+
+    with torch.no_grad():
+        inps, outs, attention_mask, position_ids = prepare_calibration_input(
+            model, dataloader, device
+        )
+
+    layers = model.model.layers
+
+    # Track overall statistics
+    total_params = 0
+    total_pruned = 0
+
+    for i in range(len(layers)):
+        layer = layers[i]
+        subset = find_layers(layer)
+
+        if f"model.layers.{i}" in model.hf_device_map:
+            dev = model.hf_device_map[f"model.layers.{i}"]
+            inps = inps.to(dev)
+            outs = outs.to(dev)
+            attention_mask = attention_mask.to(dev)
+            position_ids = position_ids.to(dev)
+
+        wrapped_layers = {}
+        for name in subset:
+            wrapped_layers[name] = WrappedGPT(subset[name])
+
+        def add_batch(name):
+            def tmp(_, inp, out):
+                wrapped_layers[name].add_batch(inp[0].data, out.data)
+            return tmp
+
+        handles = []
+        for name in wrapped_layers:
+            handles.append(subset[name].register_forward_hook(add_batch(name)))
+
+        for j in range(args.nsamples):
+            with torch.no_grad():
+                outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
+
+        for h in handles:
+            h.remove()
+
+        layer_pruned = 0
+        layer_total = 0
+
+        for name in subset:
+            W = subset[name].weight.data
+            W_metric = torch.abs(W) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1,-1)))
+
+            # Apply block pruning with top-k preservation
+            W_mask, actual_sparsity = apply_block_pruning_with_topk(
+                W, W_metric, args.sparsity_ratio, block_size, topk_per_block
+            )
+
+            # Apply mask
+            W[W_mask] = 0
+
+            # Statistics
+            layer_pruned += W_mask.sum().item()
+            layer_total += W.numel()
+
+        total_pruned += layer_pruned
+        total_params += layer_total
+
+        layer_sparsity = layer_pruned / layer_total if layer_total > 0 else 0
+        print(f"layer {i} sparsity {layer_sparsity:.6f}")
+
+        for j in range(args.nsamples):
+            with torch.no_grad():
+                outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
+
+        inps, outs = outs, inps
+
+    overall_sparsity = total_pruned / total_params if total_params > 0 else 0
+    print(f"\nOverall sparsity: {overall_sparsity*100:.4f}%")
+    print(f"Total parameters: {total_params}")
+    print(f"Pruned parameters: {total_pruned}")
+
+    model.config.use_cache = use_cache
+    torch.cuda.empty_cache()
+
+    # Print overall statistics
+    overall_sparsity = total_pruned / total_params
+    print("\n" + "="*80)
+    print("Block Pruning Complete")
+    print("="*80)
+    print(f"Total parameters: {total_params:,}")
+    print(f"Pruned parameters: {total_pruned:,}")
+    print(f"Overall sparsity: {overall_sparsity*100:.4f}%")
+    print(f"Target sparsity: {args.sparsity_ratio*100:.2f}%")
+    print("="*80 + "\n")
