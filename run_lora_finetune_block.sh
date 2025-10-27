@@ -6,17 +6,17 @@
 # Configuration
 PRUNED_MODEL="out/llama2_7b/block_16x16/wanda/pruned_model"
 CONFIG_NAME="/mnt/sdb/llm_models/Llama-2-7b-hf"
-OUTPUT_DIR="out/llama2_7b/block_16x16/wanda/lora_weights_wikitext_epoch2"
+OUTPUT_DIR="out/llama2_7b/block_16x16/wanda/lora_weights_wikitext_epoch15"
 DATASET="wikitext"
 DATASET_CONFIG="wikitext-2-raw-v1"
-NUM_EPOCHS=2
-RESUME_CHECKPOINT=""  # Set to checkpoint path to resume, e.g., "out/.../checkpoint-200"
+NUM_EPOCHS=10
+RESUME_CHECKPOINT="out/llama2_7b/block_16x16/wanda/lora_weights_wikitext_epoch2"  # Resume from epoch 2
 BLOCK_SIZE=1024
 BATCH_SIZE=1
 EVAL_BATCH_SIZE=8
 MAX_TRAIN_SAMPLES=30000
 MAX_EVAL_SAMPLES=128
-LEARNING_RATE=1e-4
+LEARNING_RATE=2e-4  # Increased for faster learning
 
 # CUDA device
 export CUDA_VISIBLE_DEVICES=1,3

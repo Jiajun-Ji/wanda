@@ -9,7 +9,7 @@ CONFIG_NAME="/mnt/sdb/llm_models/Llama-2-7b-hf"
 OUTPUT_DIR="out/llama2_7b/block_16x16_20sparsity/wanda/lora_weights_wikitext"
 DATASET="wikitext"
 DATASET_CONFIG="wikitext-2-raw-v1"
-NUM_EPOCHS=2
+NUM_EPOCHS=1
 RESUME_CHECKPOINT=""  # Set to checkpoint path to resume, e.g., "out/.../checkpoint-200"
 
 # Training hyperparameters
@@ -21,7 +21,7 @@ MAX_TRAIN_SAMPLES=30000
 MAX_EVAL_SAMPLES=128
 
 # GPU configuration
-export CUDA_VISIBLE_DEVICES=2,4
+export CUDA_VISIBLE_DEVICES=2
 
 echo "=========================================="
 echo "LoRA Fine-tuning Configuration"
