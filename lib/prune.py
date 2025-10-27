@@ -1050,7 +1050,7 @@ def prune_wanda_hybrid_2_4(
     print("="*80)
     print("Loading calibration data...")
     print("="*80)
-    dataloader, _ = get_loaders("c4", nsamples=args.nsamples, seed=args.seed, seqlen=model.seqlen, tokenizer=tokenizer)
+    dataloader, _ = get_loaders("wikitext", nsamples=args.nsamples, seed=args.seed, seqlen=model.seqlen, tokenizer=tokenizer)
 
     print("="*80)
     print("Starting hybrid block pruning with 2:4 sparsity...")
