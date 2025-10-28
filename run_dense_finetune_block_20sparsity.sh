@@ -8,8 +8,8 @@
 # ========================================
 
 # Default: single GPU training
-NUM_GPUS=1
-GPU_IDS="2"
+NUM_GPUS=2
+GPU_IDS="2,3"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do

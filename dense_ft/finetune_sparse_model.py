@@ -176,13 +176,30 @@ def main():
 
     # Load pruned model
     logger.info("Loading pruned model for full fine-tuning with SparseTrainer...")
-    model = AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        torch_dtype=torch.float16,
-        cache_dir=model_args.cache_dir,
-        low_cpu_mem_usage=True,
-        device_map="auto"
-    )
+
+    # Check if we're in distributed training mode
+    # In distributed mode, we can't use device_map='auto'
+    is_distributed = int(os.environ.get("WORLD_SIZE", 1)) > 1
+
+    if is_distributed:
+        # Multi-GPU training: don't use device_map, let DDP handle device placement
+        logger.info("Detected distributed training mode - loading model without device_map")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            torch_dtype=torch.float16,
+            cache_dir=model_args.cache_dir,
+            low_cpu_mem_usage=True,
+        )
+    else:
+        # Single-GPU training: use device_map='auto' for automatic placement
+        logger.info("Single GPU training mode - loading model with device_map='auto'")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            torch_dtype=torch.float16,
+            cache_dir=model_args.cache_dir,
+            low_cpu_mem_usage=True,
+            device_map="auto"
+        )
 
     # Enable gradient checkpointing to save memory
     model.gradient_checkpointing_enable()
