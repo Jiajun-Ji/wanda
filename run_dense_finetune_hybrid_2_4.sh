@@ -9,7 +9,7 @@
 
 # Default: single GPU training
 NUM_GPUS=1
-GPU_IDS="2,3"
+GPU_IDS="4,1"
 USE_FLASH_ATTN="false"  # Default: disabled
 USE_SDPA="true"  # Default: disabled
 
@@ -71,14 +71,14 @@ done
 # ========================================
 
 # Pruned model path
-PRUNED_MODEL="out/llama2_7b/block_16x16_20sparsity/wanda/pruned_model"
+PRUNED_MODEL="out/llama2_7b/block_16x16_hybrid_2_4/wanda/pruned_model"
 CONFIG_NAME="/mnt/sdb/llm_models/Llama-2-7b-hf"
-OUTPUT_DIR="out/llama2_7b/block_16x16_20sparsity/wanda/dense_finetuned_model"
+OUTPUT_DIR="out/llama2_7b/block_16x16_hybrid_2_4/wanda/dense_finetuned_model"
 DATASET="wikitext"
 DATASET_CONFIG="wikitext-2-raw-v1"
 
 # Training hyperparameters
-NUM_EPOCHS=3  # Full fine-tuning usually needs fewer epochs than LoRA
+NUM_EPOCHS=1  # Full fine-tuning usually needs fewer epochs than LoRA
 LEARNING_RATE=5e-5  # Lower learning rate for full fine-tuning
 BATCH_SIZE=1  # Small batch size due to memory constraints
 EVAL_BATCH_SIZE=4

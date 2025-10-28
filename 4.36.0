@@ -1,0 +1,33 @@
+Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple
+Requirement already satisfied: transformers in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (4.31.0)
+Collecting transformers
+  Using cached https://pypi.tuna.tsinghua.edu.cn/packages/71/d3/c16c3b3cf7655a67db1144da94b021c200ac1303f82428f2beef6c2e72bb/transformers-4.57.1-py3-none-any.whl (12.0 MB)
+Requirement already satisfied: filelock in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from transformers) (3.19.1)
+Requirement already satisfied: huggingface-hub<1.0,>=0.34.0 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from transformers) (0.36.0)
+Requirement already satisfied: numpy>=1.17 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from transformers) (1.26.3)
+Requirement already satisfied: packaging>=20.0 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from transformers) (25.0)
+Requirement already satisfied: pyyaml>=5.1 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from transformers) (6.0.3)
+Requirement already satisfied: regex!=2019.12.17 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from transformers) (2025.10.23)
+Requirement already satisfied: requests in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from transformers) (2.32.5)
+Collecting tokenizers<=0.23.0,>=0.22.0 (from transformers)
+  Using cached https://pypi.tuna.tsinghua.edu.cn/packages/d0/c6/dc3a0db5a6766416c32c034286d7c2d406da1f498e4de04ab1b8959edd00/tokenizers-0.22.1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.3 MB)
+Requirement already satisfied: safetensors>=0.4.3 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from transformers) (0.6.2)
+Requirement already satisfied: tqdm>=4.27 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from transformers) (4.67.1)
+Requirement already satisfied: fsspec>=2023.5.0 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from huggingface-hub<1.0,>=0.34.0->transformers) (2025.9.0)
+Requirement already satisfied: typing-extensions>=3.7.4.3 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from huggingface-hub<1.0,>=0.34.0->transformers) (4.15.0)
+Requirement already satisfied: hf-xet<2.0.0,>=1.1.3 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from huggingface-hub<1.0,>=0.34.0->transformers) (1.2.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from requests->transformers) (2.1.1)
+Requirement already satisfied: idna<4,>=2.5 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from requests->transformers) (3.4)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from requests->transformers) (1.26.13)
+Requirement already satisfied: certifi>=2017.4.17 in /home/jjji/miniforge3/envs/wanda_lora/lib/python3.9/site-packages (from requests->transformers) (2022.12.7)
+Installing collected packages: tokenizers, transformers
+  Attempting uninstall: tokenizers
+    Found existing installation: tokenizers 0.13.3
+    Uninstalling tokenizers-0.13.3:
+      Successfully uninstalled tokenizers-0.13.3
+  Attempting uninstall: transformers
+    Found existing installation: transformers 4.31.0
+    Uninstalling transformers-4.31.0:
+      Successfully uninstalled transformers-4.31.0
+
+Successfully installed tokenizers-0.22.1 transformers-4.57.1

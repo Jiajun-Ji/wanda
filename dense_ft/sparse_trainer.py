@@ -1,6 +1,6 @@
-from transformers.trainer import Trainer 
-import torch 
-import torch.nn as nn 
+from transformers.trainer import Trainer
+import torch
+import torch.nn as nn
 
 def find_layers(module, layers=[nn.Linear], name=''):
     if type(module) in layers:
@@ -23,8 +23,17 @@ def fix_grad_nan_inf(model):
 
 
 def mask_grad(model):
-    layers = model.model.layers
-    count = 0 
+    # Handle DistributedDataParallel wrapper
+    # In multi-GPU training, model is wrapped in DDP, need to access .module
+    if hasattr(model, 'module'):
+        # Multi-GPU: model is DistributedDataParallel
+        actual_model = model.module
+    else:
+        # Single-GPU: model is the actual model
+        actual_model = model
+
+    layers = actual_model.model.layers
+    count = 0
     total_params = 0
     for i in range(len(layers)):
         layer = layers[i]
@@ -38,11 +47,19 @@ def mask_grad(model):
             subset[name].weight.grad[mask]= 0
  
 def check_sparsity(model):
-    use_cache = model.config.use_cache 
-    model.config.use_cache = False 
+    # Handle DistributedDataParallel wrapper
+    if hasattr(model, 'module'):
+        # Multi-GPU: model is DistributedDataParallel
+        actual_model = model.module
+    else:
+        # Single-GPU: model is the actual model
+        actual_model = model
 
-    layers = model.model.layers
-    count = 0 
+    use_cache = actual_model.config.use_cache
+    actual_model.config.use_cache = False
+
+    layers = actual_model.model.layers
+    count = 0
     total_params = 0
     for i in range(len(layers)):
         layer = layers[i]
@@ -60,19 +77,31 @@ def check_sparsity(model):
 
         # print(f"layer {i} sparsity {float(sub_count)/sub_params:.4f}")
 
-    model.config.use_cache = use_cache 
-    return float(count)/total_params 
+    actual_model.config.use_cache = use_cache
+    return float(count)/total_params
 
 class SparseTrainer(Trainer):
-    def __init__(self, model= None, args= None, data_collator= None, train_dataset= None, eval_dataset= None, 
+    def __init__(self, model= None, args= None, data_collator= None, train_dataset= None, eval_dataset= None,
             tokenizer= None, model_init= None, compute_metrics= None, callbacks= None, optimizers= (None, None),
-            preprocess_logits_for_metrics= None
+            preprocess_logits_for_metrics= None, **kwargs
             ):
-        super().__init__(model, args, data_collator, train_dataset, eval_dataset, tokenizer, model_init, compute_metrics, callbacks, 
-                                optimizers, preprocess_logits_for_metrics)
+        super().__init__(
+            model=model,
+            args=args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            tokenizer=tokenizer,
+            model_init=model_init,
+            compute_metrics=compute_metrics,
+            callbacks=callbacks,
+            optimizers=optimizers,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+            **kwargs
+        )
         self.counter = 0
 
-    def training_step(self, model, inputs):
+    def training_step(self, model, inputs, num_items_in_batch=None):
         """
         Perform a training step on a batch of inputs.
 
@@ -102,14 +131,8 @@ class SparseTrainer(Trainer):
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
-        if self.do_grad_scaling: ## False 
-            self.scaler.scale(loss).backward()
-        elif self.use_apex:   ## False 
-            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                scaled_loss.backward()
-        else:
-            self.accelerator.backward(loss)
-            # pass 
+        # Use accelerator for backward pass (transformers 4.57+)
+        self.accelerator.backward(loss)
 
         mask_grad(model)   ### mask the gradients
 

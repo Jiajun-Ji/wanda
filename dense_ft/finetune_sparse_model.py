@@ -27,9 +27,16 @@ from transformers import (
     HfArgumentParser,
     TrainingArguments,
     default_data_collator,
-    is_torch_tpu_available,
     set_seed,
 )
+
+# For compatibility with different transformers versions
+try:
+    from transformers import is_torch_tpu_available
+except ImportError:
+    # transformers 4.57+ removed is_torch_tpu_available
+    def is_torch_tpu_available():
+        return False
 from transformers.trainer_utils import get_last_checkpoint
 
 # Import SparseTrainer from current directory
@@ -48,6 +55,14 @@ class ModelArguments:
     config_name: Optional[str] = field(
         default=None,
         metadata={"help": "Pretrained config name or path."},
+    )
+    use_flash_attention: bool = field(
+        default=False,
+        metadata={"help": "Whether to use Flash Attention 3 (requires flash-attn library)."},
+    )
+    use_sdpa: bool = field(
+        default=False,
+        metadata={"help": "Whether to use SDPA (Scaled Dot Product Attention) from PyTorch 2.0+."},
     )
     tokenizer_name: Optional[str] = field(
         default=None,
@@ -181,24 +196,43 @@ def main():
     # In distributed mode, we can't use device_map='auto'
     is_distributed = int(os.environ.get("WORLD_SIZE", 1)) > 1
 
+    # Determine attention implementation
+    attn_implementation = None
+    if model_args.use_flash_attention and model_args.use_sdpa:
+        raise ValueError("Cannot use both Flash Attention and SDPA. Please choose one.")
+
+    if model_args.use_flash_attention:
+        logger.info("Flash Attention 3 enabled")
+        attn_implementation = "flash_attention_2"  # Use FA2 API (compatible with FA3)
+    elif model_args.use_sdpa:
+        logger.info("SDPA (Scaled Dot Product Attention) enabled")
+        attn_implementation = "sdpa"  # PyTorch 2.0+ native SDPA
+
+    # Build model loading kwargs
+    model_kwargs = {
+        "torch_dtype": torch.bfloat16,  # Use BF16 to match training precision
+        "cache_dir": model_args.cache_dir,
+        "low_cpu_mem_usage": True,
+    }
+
+    # Add attn_implementation only if specified
+    if attn_implementation is not None:
+        model_kwargs["attn_implementation"] = attn_implementation
+
     if is_distributed:
         # Multi-GPU training: don't use device_map, let DDP handle device placement
         logger.info("Detected distributed training mode - loading model without device_map")
         model = AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
-            torch_dtype=torch.float16,
-            cache_dir=model_args.cache_dir,
-            low_cpu_mem_usage=True,
+            **model_kwargs
         )
     else:
         # Single-GPU training: use device_map='auto' for automatic placement
         logger.info("Single GPU training mode - loading model with device_map='auto'")
+        model_kwargs["device_map"] = "auto"
         model = AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
-            torch_dtype=torch.float16,
-            cache_dir=model_args.cache_dir,
-            low_cpu_mem_usage=True,
-            device_map="auto"
+            **model_kwargs
         )
 
     # Enable gradient checkpointing to save memory
