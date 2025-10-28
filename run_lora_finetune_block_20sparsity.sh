@@ -4,16 +4,16 @@
 # This script fine-tunes the 20% sparsity block-pruned model using LoRA
 
 # Configuration
-PRUNED_MODEL="out/llama2_7b/block_16x16_20sparsity/wanda/pruned_model"
+PRUNED_MODEL="out/llama2_7b/block_16x16_20sparsity/wanda/pruned_model"  # Base pruned model
 CONFIG_NAME="/mnt/sdb/llm_models/Llama-2-7b-hf"
-OUTPUT_DIR="out/llama2_7b/block_16x16_20sparsity/wanda/lora_weights_wikitext"
+OUTPUT_DIR="out/llama2_7b/block_16x16_20sparsity/wanda/lora_weights_wikitext_epoch5"
 DATASET="wikitext"
 DATASET_CONFIG="wikitext-2-raw-v1"
-NUM_EPOCHS=1
-RESUME_CHECKPOINT=""  # Set to checkpoint path to resume, e.g., "out/.../checkpoint-200"
+NUM_EPOCHS=10  # Total 5 epochs
+RESUME_CHECKPOINT="out/llama2_7b/block_16x16_20sparsity/wanda/lora_weights_wikitext"  # Resume from epoch 1
 
 # Training hyperparameters
-LEARNING_RATE=1e-4
+LEARNING_RATE=5e-4
 BATCH_SIZE=1
 EVAL_BATCH_SIZE=8
 BLOCK_SIZE=1024
