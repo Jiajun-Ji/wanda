@@ -78,7 +78,7 @@ DATASET="wikitext"
 DATASET_CONFIG="wikitext-2-raw-v1"
 
 # Training hyperparameters
-NUM_EPOCHS=3  # Full fine-tuning usually needs fewer epochs than LoRA
+NUM_EPOCHS=13  # Continue training for 10 more epochs (3 + 10 = 13 total)
 LEARNING_RATE=5e-5  # Lower learning rate for full fine-tuning
 BATCH_SIZE=1  # Small batch size due to memory constraints
 EVAL_BATCH_SIZE=4

@@ -11,12 +11,12 @@ MODEL_PATH="/mnt/sdb/llm_models/Llama-2-7b-hf"
 SPARSITY=0.5
 BLOCK_SIZE=16
 TOPK_PER_BLOCK=10
-TOP_BLOCKS_RATIO=0.6  # Top 60% blocks
+TOP_BLOCKS_RATIO=0.1  # Top 60% blocks
 SCORE_THRESHOLD=0.75   # 80% score retention for 2:4
-OUTPUT_DIR="out/llama2_7b/block_${BLOCK_SIZE}x${BLOCK_SIZE}_hybrid_2_4/wanda"
+OUTPUT_DIR="out/llama2_7b/block_${BLOCK_SIZE}x${BLOCK_SIZE}_hybrid_2_4/wanda_${TOP_BLOCKS_RATIO}"
 
 # GPU configuration
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=1
 
 echo "=========================================="
 echo "Wanda Hybrid Block Pruning with 2:4"
