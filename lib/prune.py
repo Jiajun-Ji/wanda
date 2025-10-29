@@ -1094,6 +1094,300 @@ def apply_hybrid_block_pruning_with_2_4(
     return W_mask, stats
 
 
+# ============================================================================
+# Three-Tier Fixed Ratio Block Pruning
+# ============================================================================
+
+def apply_three_tier_block_pruning(
+    W, W_metric,
+    block_size=16,
+    top_dense_ratio=0.4,
+    mid_2_4_ratio=0.4,
+    bottom_topk_ratio=0.2,
+    topk_per_block=10
+):
+    """
+    Apply three-tier fixed ratio block pruning strategy.
+
+    Three tiers with fixed ratios:
+    1. Top X% blocks: Fully dense (0% sparsity)
+    2. Middle Y% blocks: 2:4 structured sparsity (50% sparsity)
+    3. Bottom Z% blocks: Top-K sparsity (~96% sparsity)
+
+    Strategy:
+    - Compute block scores based on importance metrics
+    - Sort all blocks by score (descending)
+    - Assign top X% to tier 1 (fully dense)
+    - Assign next Y% to tier 2 (2:4 sparse)
+    - Assign remaining Z% to tier 3 (top-k sparse)
+
+    Args:
+        W: Weight matrix [M, N]
+        W_metric: Importance metric matrix [M, N]
+        block_size: Block size (default 16)
+        top_dense_ratio: Ratio of top blocks to keep fully dense (default 0.4)
+        mid_2_4_ratio: Ratio of middle blocks to apply 2:4 sparsity (default 0.4)
+        bottom_topk_ratio: Ratio of bottom blocks to apply top-k (default 0.2)
+        topk_per_block: Number of weights to keep in bottom blocks (default 10)
+
+    Returns:
+        W_mask: Boolean mask (True = prune, False = keep)
+        stats: Dictionary with statistics
+    """
+    M, N = W.shape
+
+    # Validate ratios
+    total_ratio = top_dense_ratio + mid_2_4_ratio + bottom_topk_ratio
+    if abs(total_ratio - 1.0) > 1e-6:
+        print(f"Warning: Ratios sum to {total_ratio:.4f}, not 1.0. Normalizing...")
+        top_dense_ratio /= total_ratio
+        mid_2_4_ratio /= total_ratio
+        bottom_topk_ratio /= total_ratio
+
+    # Compute block scores
+    block_scores, num_blocks_row, num_blocks_col = compute_block_scores(W_metric, block_size)
+    total_blocks = num_blocks_row * num_blocks_col
+
+    # Calculate number of blocks in each tier
+    num_top_dense = int(total_blocks * top_dense_ratio)
+    num_mid_2_4 = int(total_blocks * mid_2_4_ratio)
+    num_bottom_topk = total_blocks - num_top_dense - num_mid_2_4
+
+    # Sort blocks by score (descending)
+    flat_scores = block_scores.flatten()
+    sorted_indices = torch.argsort(flat_scores, descending=True)
+
+    # Divide into three tiers
+    top_dense_indices = set(sorted_indices[:num_top_dense].tolist())
+    mid_2_4_indices = set(sorted_indices[num_top_dense:num_top_dense+num_mid_2_4].tolist())
+    bottom_topk_indices = set(sorted_indices[num_top_dense+num_mid_2_4:].tolist())
+
+    # Initialize mask and statistics
+    W_mask = torch.zeros_like(W, dtype=torch.bool)
+
+    stats = {
+        'fully_dense_blocks': 0,
+        'sparse_2_4_blocks': 0,
+        'topk_blocks': 0,
+        'total_blocks': total_blocks,
+        'total_elements': W.numel(),
+        'total_pruned': 0,
+        'dense_weights_kept': 0,
+        'sparse_2_4_weights_kept': 0,
+        'topk_weights_kept': 0
+    }
+
+    # Process each block
+    for block_idx in range(total_blocks):
+        block_i = block_idx // num_blocks_col
+        block_j = block_idx % num_blocks_col
+
+        row_start = block_i * block_size
+        row_end = min(row_start + block_size, M)
+        col_start = block_j * block_size
+        col_end = min(col_start + block_size, N)
+
+        block = W[row_start:row_end, col_start:col_end]
+        block_elements = block.numel()
+
+        if block_idx in top_dense_indices:
+            # Tier 1: Fully dense - keep all weights
+            # mask remains False (no pruning)
+            stats['fully_dense_blocks'] += 1
+            stats['dense_weights_kept'] += block_elements
+
+        elif block_idx in mid_2_4_indices:
+            # Tier 2: Apply 2:4 structured sparsity
+            block_mask, kept = apply_2_4_sparsity_to_block(block)
+            W_mask[row_start:row_end, col_start:col_end] = block_mask
+            stats['sparse_2_4_blocks'] += 1
+            stats['sparse_2_4_weights_kept'] += kept
+            stats['total_pruned'] += block_mask.sum().item()
+
+        else:  # block_idx in bottom_topk_indices
+            # Tier 3: Apply top-k sparsity
+            block_flat = block.flatten()
+            if block_flat.numel() > topk_per_block:
+                # Keep top-k weights by absolute value
+                threshold = torch.topk(torch.abs(block_flat), topk_per_block, largest=True)[0][-1]
+                block_mask = torch.abs(block) < threshold
+                W_mask[row_start:row_end, col_start:col_end] = block_mask
+                stats['topk_blocks'] += 1
+                stats['topk_weights_kept'] += topk_per_block
+                stats['total_pruned'] += block_mask.sum().item()
+            else:
+                # Block smaller than topk, keep all
+                stats['topk_blocks'] += 1
+                stats['topk_weights_kept'] += block_flat.numel()
+
+    # Calculate actual sparsity
+    actual_sparsity = stats['total_pruned'] / stats['total_elements']
+    stats['actual_sparsity'] = actual_sparsity
+
+    return W_mask, stats
+
+
+def prune_wanda_three_tier(
+    args, model, tokenizer, device=torch.device("cuda:0"),
+    block_size=16,
+    top_dense_ratio=0.4,
+    mid_2_4_ratio=0.4,
+    bottom_topk_ratio=0.2,
+    topk_per_block=10
+):
+    """
+    Prune model using Wanda method with three-tier fixed ratio block pruning.
+
+    Three tiers with fixed ratios:
+    1. Top X% blocks: Fully dense (most important)
+    2. Middle Y% blocks: 2:4 structured sparsity (moderately important)
+    3. Bottom Z% blocks: Top-K sparsity (least important)
+
+    Args:
+        args: Arguments containing model path, nsamples, seed, etc.
+        model: The model to prune
+        tokenizer: Tokenizer for the model
+        device: Device to use
+        block_size: Size of blocks (default 16)
+        top_dense_ratio: Ratio of top blocks to keep fully dense (default 0.4)
+        mid_2_4_ratio: Ratio of middle blocks to apply 2:4 (default 0.4)
+        bottom_topk_ratio: Ratio of bottom blocks to apply top-k (default 0.2)
+        topk_per_block: Number of weights to keep in bottom blocks (default 10)
+    """
+    use_cache = model.config.use_cache
+    model.config.use_cache = False
+
+    print("="*80)
+    print("Wanda Three-Tier Fixed Ratio Block Pruning")
+    print("="*80)
+    print(f"Block size: {block_size}x{block_size}")
+    print(f"Tier 1 (Fully Dense): Top {top_dense_ratio*100:.0f}% blocks")
+    print(f"Tier 2 (2:4 Sparse):  Middle {mid_2_4_ratio*100:.0f}% blocks")
+    print(f"Tier 3 (Top-K):       Bottom {bottom_topk_ratio*100:.0f}% blocks (k={topk_per_block})")
+    print("="*80)
+
+    print("\nLoading calibration data (WikiText2)...")
+    dataloader, _ = get_loaders("wikitext2", nsamples=args.nsamples, seed=args.seed, seqlen=model.seqlen, tokenizer=tokenizer)
+    print("Dataset loading complete\n")
+
+    with torch.no_grad():
+        inps, outs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, device)
+
+    layers = model.model.layers
+    total_params = 0
+    total_pruned = 0
+
+    # Global statistics
+    global_stats = {
+        'fully_dense_blocks': 0,
+        'sparse_2_4_blocks': 0,
+        'topk_blocks': 0,
+        'dense_weights_kept': 0,
+        'sparse_2_4_weights_kept': 0,
+        'topk_weights_kept': 0
+    }
+
+    print("="*80)
+    print("Starting pruning process...")
+    print("="*80)
+
+    for i in range(len(layers)):
+        layer = layers[i]
+        subset = find_layers(layer)
+
+        # Collect wrapped layers for activation computation
+        wrapped_layers = {}
+        for name in subset:
+            wrapped_layers[name] = WrappedGPT(subset[name])
+
+        def add_batch(name):
+            def tmp(_, inp, out):
+                wrapped_layers[name].add_batch(inp[0].data, out.data)
+            return tmp
+
+        handles = []
+        for name in wrapped_layers:
+            handles.append(subset[name].register_forward_hook(add_batch(name)))
+
+        for j in range(args.nsamples):
+            with torch.no_grad():
+                outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
+
+        for h in handles:
+            h.remove()
+
+        # Prune each layer
+        layer_pruned = 0
+        layer_total = 0
+        layer_stats = {
+            'fully_dense_blocks': 0,
+            'sparse_2_4_blocks': 0,
+            'topk_blocks': 0
+        }
+
+        for name in subset:
+            W = subset[name].weight.data
+            W_metric = torch.abs(W) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1, -1)))
+
+            # Apply three-tier block pruning
+            W_mask, stats = apply_three_tier_block_pruning(
+                W, W_metric, block_size,
+                top_dense_ratio, mid_2_4_ratio, bottom_topk_ratio,
+                topk_per_block
+            )
+
+            # Apply mask
+            W[W_mask] = 0
+
+            # Update statistics
+            layer_pruned += stats['total_pruned']
+            layer_total += stats['total_elements']
+            layer_stats['fully_dense_blocks'] += stats['fully_dense_blocks']
+            layer_stats['sparse_2_4_blocks'] += stats['sparse_2_4_blocks']
+            layer_stats['topk_blocks'] += stats['topk_blocks']
+
+            global_stats['fully_dense_blocks'] += stats['fully_dense_blocks']
+            global_stats['sparse_2_4_blocks'] += stats['sparse_2_4_blocks']
+            global_stats['topk_blocks'] += stats['topk_blocks']
+            global_stats['dense_weights_kept'] += stats['dense_weights_kept']
+            global_stats['sparse_2_4_weights_kept'] += stats['sparse_2_4_weights_kept']
+            global_stats['topk_weights_kept'] += stats['topk_weights_kept']
+
+        # Update global statistics
+        total_pruned += layer_pruned
+        total_params += layer_total
+
+        layer_sparsity = layer_pruned / layer_total if layer_total > 0 else 0
+        print(f"\nLayer {i}:")
+        print(f"  Sparsity: {layer_sparsity*100:.4f}%")
+        print(f"  Blocks - Dense: {layer_stats['fully_dense_blocks']}, "
+              f"2:4: {layer_stats['sparse_2_4_blocks']}, "
+              f"Top-K: {layer_stats['topk_blocks']}")
+
+        # Update inputs for next layer
+        for j in range(args.nsamples):
+            with torch.no_grad():
+                outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
+        inps, outs = outs, inps
+
+    model.config.use_cache = use_cache
+    torch.cuda.empty_cache()
+
+    # Print final statistics
+    overall_sparsity = total_pruned / total_params if total_params > 0 else 0
+
+    print("\n" + "="*80)
+    print("Pruning Complete - Final Statistics")
+    print("="*80)
+    print(f"Total blocks: {global_stats['fully_dense_blocks'] + global_stats['sparse_2_4_blocks'] + global_stats['topk_blocks']}")
+    print(f"  - Fully dense blocks: {global_stats['fully_dense_blocks']} ({global_stats['dense_weights_kept']:,} weights)")
+    print(f"  - 2:4 sparse blocks:  {global_stats['sparse_2_4_blocks']} ({global_stats['sparse_2_4_weights_kept']:,} weights)")
+    print(f"  - Top-K blocks:       {global_stats['topk_blocks']} ({global_stats['topk_weights_kept']:,} weights)")
+    print(f"\nTotal parameters: {total_params:,}")
+    print(f"Pruned parameters: {total_pruned:,}")
+    print(f"Overall sparsity: {overall_sparsity*100:.4f}%")
+    print("="*80 + "\n")
+
 
 def prune_wanda_hybrid_2_4(
     args, model, tokenizer, device=torch.device("cuda:0"),

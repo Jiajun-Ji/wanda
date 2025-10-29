@@ -9,7 +9,7 @@
 
 # Default: single GPU training
 NUM_GPUS=1
-GPU_IDS="4,1"
+GPU_IDS="1,6"
 USE_FLASH_ATTN="false"  # Default: disabled
 USE_SDPA="true"  # Default: disabled
 
@@ -71,9 +71,10 @@ done
 # ========================================
 
 # Pruned model path
-PRUNED_MODEL="out/llama2_7b/block_16x16_hybrid_2_4/wanda/pruned_model"
+# PRUNED_MODEL="out/llama2_7b/block_16x16_hybrid_2_4/wanda/pruned_model"
+PRUNED_MODEL="out/llama2_7b/block_16x16_three_tier_0.35_0.45_0.2/wanda/pruned_model"
 CONFIG_NAME="/mnt/sdb/llm_models/Llama-2-7b-hf"
-OUTPUT_DIR="out/llama2_7b/block_16x16_hybrid_2_4/wanda/dense_finetuned_model"
+OUTPUT_DIR="out/llama2_7b/block_16x16_three_tier_0.35_0.45_0.2/wanda/dense_finetuned_model"
 DATASET="wikitext"
 DATASET_CONFIG="wikitext-2-raw-v1"
 
@@ -228,12 +229,12 @@ if [ $NUM_GPUS -eq 1 ]; then
         --overwrite_output_dir \
         --output_dir ../${OUTPUT_DIR} \
         --logging_steps 10 \
-        --eval_steps 200 \
-        --save_steps 200 \
+        --eval_steps 100 \
+        --save_steps 100 \
         --logging_first_step \
         --eval_strategy steps \
         --save_strategy steps \
-        --save_total_limit 3 \
+        --save_total_limit 5 \
         --bf16 \
         --gradient_checkpointing \
         --optim adamw_torch \
@@ -267,12 +268,12 @@ else
         --overwrite_output_dir \
         --output_dir ../${OUTPUT_DIR} \
         --logging_steps 10 \
-        --eval_steps 200 \
-        --save_steps 200 \
+        --eval_steps 100 \
+        --save_steps 100 \
         --logging_first_step \
         --eval_strategy steps \
         --save_strategy steps \
-        --save_total_limit 3 \
+        --save_total_limit 5 \
         --bf16 \
         --gradient_checkpointing \
         --optim adamw_torch \

@@ -1,0 +1,114 @@
+import argparse
+import os
+import numpy as np
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from importlib.metadata import version
+
+from lib.prune import prune_wanda_three_tier, check_sparsity, find_layers
+from lib.eval import eval_ppl
+
+print('torch', version('torch'))
+print('transformers', version('transformers'))
+print('accelerate', version('accelerate'))
+print('# of gpus: ', torch.cuda.device_count())
+
+
+def get_llm(model_name, cache_dir="llm_weights"):
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        cache_dir=cache_dir,
+        low_cpu_mem_usage=True,
+        device_map="auto"
+    )
+
+    model.seqlen = model.config.max_position_embeddings
+    return model
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', type=str, help='LLaMA model')
+    parser.add_argument('--seed', type=int, default=0, help='Seed for sampling the calibration data.')
+    parser.add_argument('--nsamples', type=int, default=128, help='Number of calibration samples.')
+    parser.add_argument('--sparsity_ratio', type=float, default=0, help='Sparsity level (for reference, not used)')
+    parser.add_argument("--sparsity_type", type=str, default="three_tier")
+    parser.add_argument("--prune_method", type=str, default="wanda")
+    parser.add_argument("--cache_dir", default="llm_weights", type=str)
+    parser.add_argument('--use_variant', action="store_true", help="whether to use the wanda variant described in the appendix")
+    parser.add_argument('--save', type=str, default=None, help='Path to save results.')
+    parser.add_argument('--save_model', type=str, default=None, help='Path to save the pruned model.')
+    
+    # Three-tier specific arguments
+    parser.add_argument('--block_size', type=int, default=16, help='Block size for block pruning')
+    parser.add_argument('--top_dense_ratio', type=float, default=0.4, help='Ratio of top blocks to keep fully dense (default 0.4 = 40%)')
+    parser.add_argument('--mid_2_4_ratio', type=float, default=0.4, help='Ratio of middle blocks to apply 2:4 sparsity (default 0.4 = 40%)')
+    parser.add_argument('--bottom_topk_ratio', type=float, default=0.2, help='Ratio of bottom blocks to apply top-k (default 0.2 = 20%)')
+    parser.add_argument('--topk_per_block', type=int, default=10, help='Number of weights to keep in bottom blocks (default 10)')
+
+    args = parser.parse_args()
+
+    # Setting seeds for reproducibility
+    np.random.seed(args.seed)
+    torch.random.manual_seed(args.seed)
+
+    model_name = args.model.split("/")[-1]
+    print(f"loading llm model {args.model}")
+    model = get_llm(args.model, args.cache_dir)
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=False)
+
+    device = torch.device("cuda:0")
+    if "30b" in args.model or "65b" in args.model:  # for 30b and 65b we use device_map to load onto multiple A6000 GPUs, thus the processing here.
+        device = model.hf_device_map["lm_head"]
+    print("use device ", device)
+
+    # Validate ratios
+    total_ratio = args.top_dense_ratio + args.mid_2_4_ratio + args.bottom_topk_ratio
+    if abs(total_ratio - 1.0) > 1e-6:
+        print(f"Warning: Ratios sum to {total_ratio:.4f}, not 1.0")
+        print("Ratios will be normalized during pruning")
+
+    print("="*80)
+    print(f"Pruning model with Wanda Three-Tier Fixed Ratio method")
+    print(f"Block size: {args.block_size}x{args.block_size}")
+    print(f"Tier 1 (Fully Dense): Top {args.top_dense_ratio*100:.0f}% blocks")
+    print(f"Tier 2 (2:4 Sparse):  Middle {args.mid_2_4_ratio*100:.0f}% blocks")
+    print(f"Tier 3 (Top-K):       Bottom {args.bottom_topk_ratio*100:.0f}% blocks (k={args.topk_per_block})")
+    print("="*80)
+    
+    prune_wanda_three_tier(
+        args, model, tokenizer, device, 
+        args.block_size, 
+        args.top_dense_ratio,
+        args.mid_2_4_ratio,
+        args.bottom_topk_ratio,
+        args.topk_per_block
+    )
+
+    ################################################################
+    print("*"*30)
+    sparsity_ratio = check_sparsity(model)
+    print(f"sparsity sanity check {sparsity_ratio:.4f}")
+    print("*"*30)
+    ################################################################
+    
+    ppl_test = eval_ppl(args, model, tokenizer, device)
+    print(f"wikitext perplexity {ppl_test}")
+
+    if not os.path.exists(args.save):
+        os.makedirs(args.save)
+    save_filepath = os.path.join(args.save, f"log_{model_name}.txt")
+    with open(save_filepath, "w") as f:
+        print("method\tactual_sparsity\tppl_test", file=f, flush=True)
+        print(f"{args.prune_method}\t{sparsity_ratio:.4f}\t{ppl_test:.4f}", file=f, flush=True)
+
+    if args.save_model:
+        model.save_pretrained(args.save_model)
+        tokenizer.save_pretrained(args.save_model)
+
+
+if __name__ == '__main__':
+    main()
+
