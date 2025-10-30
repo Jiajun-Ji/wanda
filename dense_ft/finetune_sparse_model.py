@@ -362,6 +362,12 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
+    # Save final model
+    logger.info("*** Saving final model ***")
+    trainer.save_model(training_args.output_dir)
+    tokenizer.save_pretrained(training_args.output_dir)
+    logger.info(f"Model saved to {training_args.output_dir}")
+
     logger.info("*** Sparse full fine-tuning complete! ***")
 
 

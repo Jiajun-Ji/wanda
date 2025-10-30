@@ -1,13 +1,20 @@
 # Import necessary modules
+import os
+import sys
 import time
 import torch
 import torch.nn as nn
 
 # Import get_loaders function from data module within the same directory
-from .data import get_loaders 
+from .data import get_loaders
 
 from collections import defaultdict
 import fnmatch
+
+# 添加 lm-evaluation-harness 到 Python 路径（如果存在）
+_LM_EVAL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'lm-evaluation-harness')
+if os.path.exists(_LM_EVAL_PATH) and _LM_EVAL_PATH not in sys.path:
+    sys.path.insert(0, _LM_EVAL_PATH)
 
 
 # Function to evaluate perplexity (ppl) on a specified model and tokenizer
@@ -129,37 +136,47 @@ def eval_ppl_wikitext(model, testenc, bs=1, device=None):
     return ppl.item()
 
 
-def eval_zero_shot(model_name, model, tokenizer, task_list=["boolq","rte","hellaswag","winogrande","arc_challenge","arc_easy","openbookqa"], 
+def eval_zero_shot(model_name, model, tokenizer, task_list=["boolq","rte","hellaswag","winogrande","arc_challenge","arc_easy","openbookqa"],
         num_fewshot=0, use_accelerate=False, add_special_tokens=False):
-    from lm_eval import tasks, evaluator 
+    from lm_eval import evaluator
+    from lm_eval.tasks import TaskManager
+    from lm_eval.models.huggingface import HFLM
+
+    # 使用 TaskManager 来匹配任务
+    task_manager = TaskManager()
+
     def pattern_match(patterns, source_list):
         task_names = set()
         for pattern in patterns:
             for matching in fnmatch.filter(source_list, pattern):
                 task_names.add(matching)
         return list(task_names)
-    task_names = pattern_match(task_list, tasks.ALL_TASKS)
-    model_args = f"pretrained={model_name},cache_dir=./llm_weights"
-    limit = None 
+
+    # 获取所有可用任务
+    all_tasks = task_manager.all_tasks
+    task_names = pattern_match(task_list, all_tasks)
+
+    # 设置 limit
+    limit = None
     if "70b" in model_name or "65b" in model_name:
         limit = 2000
-    if use_accelerate:
-        model_args = f"pretrained={model_name},cache_dir=./llm_weights,use_accelerate=True"
+
+    # 将已加载的模型包装在 HFLM 中
+    # 新版本的 lm_eval 需要使用 HFLM 包装器
+    lm = HFLM(
+        pretrained=model,
+        tokenizer=tokenizer,
+        batch_size=1,
+        device="cuda" if torch.cuda.is_available() else "cpu"
+    )
+
     results = evaluator.simple_evaluate(
-        model="hf-causal-experimental",
-        model_args=model_args,
+        model=lm,
         tasks=task_names,
         num_fewshot=num_fewshot,
         batch_size=None,
-        device=None,
-        no_cache=True,
         limit=limit,
-        description_dict={},
-        decontamination_ngrams_path=None,
-        check_integrity=False,
-        pretrained_model=model,
-        tokenizer=tokenizer, 
-        add_special_tokens=add_special_tokens
+        task_manager=task_manager
     )
 
-    return results 
+    return results

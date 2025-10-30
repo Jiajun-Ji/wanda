@@ -66,9 +66,54 @@ def get_c4(nsamples, seed, seqlen, tokenizer):
     valenc = TokenizerWrapper(valenc)
     return trainloader, valenc
 
+# Load and process GSM8K dataset
+def get_gsm8k(nsamples, seed, seqlen, tokenizer):
+    """
+    Load GSM8K dataset for pruning calibration.
+    Uses question + answer as input text.
+    """
+    # Load GSM8K train dataset
+    traindata = load_dataset('gsm8k', 'main', split='train')
+
+    # Load wikitext2 test for evaluation (keep consistent with other datasets)
+    testdata = load_dataset('wikitext', 'wikitext-2-raw-v1', split='test', verification_mode='no_checks')
+    testenc = tokenizer("\n\n".join(testdata['text']), return_tensors='pt')
+
+    # Generate samples from training set
+    random.seed(seed)
+    trainloader = []
+
+    for _ in range(nsamples):
+        # Randomly select a sample
+        i = random.randint(0, len(traindata) - 1)
+        sample = traindata[i]
+
+        # Format: Question + Answer (for better activation coverage)
+        text = f"Question: {sample['question']}\nAnswer: {sample['answer']}"
+
+        # Tokenize
+        enc = tokenizer(text, return_tensors='pt', max_length=seqlen, truncation=True)
+        inp = enc.input_ids
+
+        # Pad if necessary
+        if inp.shape[1] < seqlen:
+            padding = torch.zeros((1, seqlen - inp.shape[1]), dtype=inp.dtype)
+            inp = torch.cat([inp, padding], dim=1)
+
+        # Create target (not used in pruning, but keep format consistent)
+        tar = inp.clone()
+        tar[:, :-1] = -100
+
+        trainloader.append((inp, tar))
+
+    return trainloader, testenc
+
 # Function to select the appropriate loader based on dataset name
 def get_loaders(name, nsamples=128, seed=0, seqlen=2048, tokenizer=None):
     if 'wikitext2' in name:
         return get_wikitext2(nsamples, seed, seqlen, tokenizer)
     if "c4" in name:
         return get_c4(nsamples, seed, seqlen, tokenizer)
+    if "gsm8k" in name:
+        return get_gsm8k(nsamples, seed, seqlen, tokenizer)
+    raise ValueError(f"Unknown dataset: {name}")

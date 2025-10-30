@@ -1,0 +1,41 @@
+{
+  "original": {
+    "model_name": "Original Model",
+    "model_path": "/mnt/sdb/llm_models/Llama-2-7b-hf",
+    "sparsity": 1.355001963482002e-06,
+    "wikitext_ppl": 5.1166839599609375,
+    "eval_time_seconds": 1049.2628419399261,
+    "tasks": {
+      "gsm8k": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "gsm8k",
+          "exact_match,strict-match": 0.0,
+          "exact_match_stderr,strict-match": 0.0,
+          "exact_match,flexible-extract": 0.05155420773313116,
+          "exact_match_stderr,flexible-extract": 0.00609088795526282
+        }
+      }
+    }
+  },
+  "pruned": {
+    "model_name": "Pruned & Finetuned Model",
+    "model_path": "out/llama2_7b/block_16x16_three_tier_0.35_0.45_0.2/wanda/dense_finetuned_model",
+    "sparsity": 0.41313774428219374,
+    "wikitext_ppl": 8.838757514953613,
+    "eval_time_seconds": 5746.890648126602,
+    "tasks": {
+      "gsm8k": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "gsm8k",
+          "exact_match,strict-match": 0.0,
+          "exact_match_stderr,strict-match": 0.0,
+          "exact_match,flexible-extract": 0.02350265352539803,
+          "exact_match_stderr,flexible-extract": 0.004172883669643965
+        }
+      }
+    }
+  },
+  "timestamp": "20251030_180951"
+}

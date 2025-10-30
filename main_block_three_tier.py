@@ -39,6 +39,9 @@ def main():
     parser.add_argument('--use_variant', action="store_true", help="whether to use the wanda variant described in the appendix")
     parser.add_argument('--save', type=str, default=None, help='Path to save results.')
     parser.add_argument('--save_model', type=str, default=None, help='Path to save the pruned model.')
+    parser.add_argument('--calib_dataset', type=str, default='wikitext2',
+                        choices=['wikitext2', 'c4', 'gsm8k'],
+                        help='Calibration dataset (default: wikitext2)')
     
     # Three-tier specific arguments
     parser.add_argument('--block_size', type=int, default=16, help='Block size for block pruning')
@@ -72,6 +75,7 @@ def main():
 
     print("="*80)
     print(f"Pruning model with Wanda Three-Tier Fixed Ratio method")
+    print(f"Calibration dataset: {args.calib_dataset}")
     print(f"Block size: {args.block_size}x{args.block_size}")
     print(f"Tier 1 (Fully Dense): Top {args.top_dense_ratio*100:.0f}% blocks")
     print(f"Tier 2 (2:4 Sparse):  Middle {args.mid_2_4_ratio*100:.0f}% blocks")

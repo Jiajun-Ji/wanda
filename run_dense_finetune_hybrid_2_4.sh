@@ -9,7 +9,7 @@
 
 # Default: single GPU training
 NUM_GPUS=1
-GPU_IDS="1,6"
+GPU_IDS="2,3"
 USE_FLASH_ATTN="false"  # Default: disabled
 USE_SDPA="true"  # Default: disabled
 
@@ -72,19 +72,19 @@ done
 
 # Pruned model path
 # PRUNED_MODEL="out/llama2_7b/block_16x16_hybrid_2_4/wanda/pruned_model"
-PRUNED_MODEL="out/llama2_7b/block_16x16_three_tier_0.35_0.45_0.2/wanda/pruned_model"
+PRUNED_MODEL="out/progressive_three_tier/iter5/finetuned_model"
 CONFIG_NAME="/mnt/sdb/llm_models/Llama-2-7b-hf"
-OUTPUT_DIR="out/llama2_7b/block_16x16_three_tier_0.35_0.45_0.2/wanda/dense_finetuned_model"
+OUTPUT_DIR="out/progressive_three_tier/iter5/dense_finetuned_model"
 DATASET="wikitext"
 DATASET_CONFIG="wikitext-2-raw-v1"
 
 # Training hyperparameters
-NUM_EPOCHS=1  # Full fine-tuning usually needs fewer epochs than LoRA
+NUM_EPOCHS=2  # Full fine-tuning usually needs fewer epochs than LoRA
 LEARNING_RATE=5e-5  # Lower learning rate for full fine-tuning
 BATCH_SIZE=1  # Small batch size due to memory constraints
 EVAL_BATCH_SIZE=4
 BLOCK_SIZE=1024  # Sequence length
-MAX_TRAIN_SAMPLES=30000
+MAX_TRAIN_SAMPLES=10000
 MAX_EVAL_SAMPLES=128
 
 # Gradient accumulation to simulate larger batch size
@@ -229,8 +229,8 @@ if [ $NUM_GPUS -eq 1 ]; then
         --overwrite_output_dir \
         --output_dir ../${OUTPUT_DIR} \
         --logging_steps 10 \
-        --eval_steps 100 \
-        --save_steps 100 \
+        --eval_steps 30 \
+        --save_steps 30 \
         --logging_first_step \
         --eval_strategy steps \
         --save_strategy steps \
@@ -268,8 +268,8 @@ else
         --overwrite_output_dir \
         --output_dir ../${OUTPUT_DIR} \
         --logging_steps 10 \
-        --eval_steps 100 \
-        --save_steps 100 \
+        --eval_steps 30 \
+        --save_steps 30 \
         --logging_first_step \
         --eval_strategy steps \
         --save_strategy steps \
