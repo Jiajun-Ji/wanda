@@ -4,14 +4,14 @@
 # Usage: bash run_eval_compare.sh
 
 # 设置路径
-ORIGINAL_MODEL="/mnt/sdb/llm_models/Llama-2-7b-hf"
-PRUNED_MODEL="out/llama2_7b/block_16x16_three_tier_0.35_0.45_0.2/wanda/dense_finetuned_model"
+ORIGINAL_MODEL="/home/jjji/Research/Hybird-Kernel/wanda/out/progressive_three_tier/iter5/finetuned_model"
+PRUNED_MODEL="/home/jjji/Research/Hybird-Kernel/wanda/out/progressive_three_tier/iter5/dense_finetuned_model"
 
 # 评估任务列表
 TASKS="boolq rte hellaswag winogrande arc_easy arc_challenge openbookqa"
 
 # 输出目录
-OUTPUT_DIR="eval_results"
+OUTPUT_DIR="eval_results_three_tier_finetuned_vs_dense_finetuned"
 
 # 其他参数
 NSAMPLES=128
@@ -30,7 +30,7 @@ echo "=========================================="
 echo ""
 
 # 运行评估
-CUDA_VISIBLE_DEVICES=7 python eval_zero_shot_compare.py \
+CUDA_VISIBLE_DEVICES=1 python eval_zero_shot_compare.py \
     --original_model "$ORIGINAL_MODEL" \
     --pruned_model "$PRUNED_MODEL" \
     --tasks $TASKS \

@@ -1,0 +1,149 @@
+{
+  "original": {
+    "model_name": "Original Model",
+    "model_path": "/home/jjji/Research/Hybird-Kernel/wanda/out/progressive_three_tier/iter5/finetuned_model",
+    "sparsity": 0.4131287050679558,
+    "wikitext_ppl": 71.38221740722656,
+    "eval_time_seconds": 1912.049699306488,
+    "tasks": {
+      "boolq": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "boolq",
+          "acc,none": 0.6229357798165137,
+          "acc_stderr,none": 0.008476602927953731
+        }
+      },
+      "rte": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "rte",
+          "acc,none": 0.555956678700361,
+          "acc_stderr,none": 0.029907396333795997
+        }
+      },
+      "hellaswag": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "hellaswag",
+          "acc,none": 0.2984465245966939,
+          "acc_stderr,none": 0.004566412808642457,
+          "acc_norm,none": 0.3401712806213902,
+          "acc_norm_stderr,none": 0.0047279834341954876
+        }
+      },
+      "winogrande": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "winogrande",
+          "acc,none": 0.5201262825572218,
+          "acc_stderr,none": 0.014041096664344327
+        }
+      },
+      "arc_easy": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "arc_easy",
+          "acc,none": 0.39814814814814814,
+          "acc_stderr,none": 0.010044662374653398,
+          "acc_norm,none": 0.40404040404040403,
+          "acc_norm_stderr,none": 0.010069061649549545
+        }
+      },
+      "arc_challenge": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "arc_challenge",
+          "acc,none": 0.21245733788395904,
+          "acc_stderr,none": 0.011953482906582958,
+          "acc_norm,none": 0.2568259385665529,
+          "acc_norm_stderr,none": 0.0127669237941168
+        }
+      },
+      "openbookqa": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "openbookqa",
+          "acc,none": 0.168,
+          "acc_stderr,none": 0.01673655354154191,
+          "acc_norm,none": 0.284,
+          "acc_norm_stderr,none": 0.02018670369357086
+        }
+      }
+    }
+  },
+  "pruned": {
+    "model_name": "Pruned & Finetuned Model",
+    "model_path": "/home/jjji/Research/Hybird-Kernel/wanda/out/progressive_three_tier/iter5/dense_finetuned_model",
+    "sparsity": 0.41312914669822537,
+    "wikitext_ppl": 11.897067070007324,
+    "eval_time_seconds": 1881.9841003417969,
+    "tasks": {
+      "boolq": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "boolq",
+          "acc,none": 0.6474006116207951,
+          "acc_stderr,none": 0.008356412493562124
+        }
+      },
+      "rte": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "rte",
+          "acc,none": 0.5523465703971119,
+          "acc_stderr,none": 0.02993107036293953
+        }
+      },
+      "hellaswag": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "hellaswag",
+          "acc,none": 0.45558653654650466,
+          "acc_stderr,none": 0.004970057183367312,
+          "acc_norm,none": 0.6033658633738299,
+          "acc_norm_stderr,none": 0.0048819904876288775
+        }
+      },
+      "winogrande": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "winogrande",
+          "acc,none": 0.5982636148382005,
+          "acc_stderr,none": 0.013778439266649494
+        }
+      },
+      "arc_easy": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "arc_easy",
+          "acc,none": 0.6296296296296297,
+          "acc_stderr,none": 0.009908978578665757,
+          "acc_norm,none": 0.5686026936026936,
+          "acc_norm_stderr,none": 0.010162752847747505
+        }
+      },
+      "arc_challenge": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "arc_challenge",
+          "acc,none": 0.33532423208191126,
+          "acc_stderr,none": 0.01379618294778556,
+          "acc_norm,none": 0.3387372013651877,
+          "acc_norm_stderr,none": 0.013830568927974332
+        }
+      },
+      "openbookqa": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "openbookqa",
+          "acc,none": 0.25,
+          "acc_stderr,none": 0.019384310743640384,
+          "acc_norm,none": 0.356,
+          "acc_norm_stderr,none": 0.021434712356072645
+        }
+      }
+    }
+  },
+  "timestamp": "20251031_011731"
+}

@@ -6,8 +6,8 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from importlib.metadata import version
 
-from lib.prune import (
-    prune_wanda_progressive_three_tier, 
+from lib.prune_opt import (
+    prune_wanda_progressive_three_tier_opt, 
     check_sparsity, 
     save_tier_map,
     load_tier_map
@@ -58,7 +58,7 @@ def load_progressive_config(config_path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, help='LLaMA model path')
+    parser.add_argument('--model', type=str, help='OPT model path')
     parser.add_argument('--seed', type=int, default=0, help='Seed for sampling the calibration data.')
     parser.add_argument('--nsamples', type=int, default=128, help='Number of calibration samples.')
     parser.add_argument("--cache_dir", default="llm_weights", type=str)
@@ -94,28 +94,29 @@ def main():
         raise ValueError(f"Iteration {args.iteration} not found in config file {args.config}")
     
     print("="*80)
-    print(f"Progressive Three-Tier Pruning - Iteration {args.iteration}")
+    print(f"Progressive Three-Tier Pruning (OPT) - Iteration {args.iteration}")
     print("="*80)
     print(f"Configuration:")
     print(f"  Dense:  {current_config['dense']*100:.0f}%")
     print(f"  2:4:    {current_config['mid_2_4']*100:.0f}%")
     print(f"  TopK:   {current_config['topk']*100:.0f}%")
-    print(f"  Epochs: {current_config['epochs']}")
+    print(f"  Dense→2:4:  {current_config['dense_to_2_4']*100:.0f}%")
+    print(f"  2:4→TopK:   {current_config['mid_2_4_to_topk']*100:.0f}%")
     print("="*80)
 
     # Load model
     model_name = args.model.split("/")[-1]
-    print(f"\nLoading model {args.model}")
+    print(f"Loading OPT model {args.model}")
     model = get_llm(args.model, args.cache_dir)
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=False)
 
     device = torch.device("cuda:0")
-    if "30b" in args.model or "65b" in args.model:
+    if "30b" in args.model or "66b" in args.model:
         device = model.hf_device_map["lm_head"]
-    print(f"Using device: {device}\n")
+    print("use device ", device)
 
-    # Load previous tier maps if continuing from previous iteration
+    # Load previous tier maps if provided
     previous_tier_maps = None
     if args.previous_tier_maps is not None and os.path.exists(args.previous_tier_maps):
         print(f"Loading previous tier maps from {args.previous_tier_maps}")
@@ -127,7 +128,7 @@ def main():
     os.makedirs(args.save, exist_ok=True)
 
     # Perform progressive pruning
-    tier_maps, stats = prune_wanda_progressive_three_tier(
+    tier_maps, stats = prune_wanda_progressive_three_tier_opt(
         args, model, tokenizer, device,
         iteration_config=current_config,
         previous_tier_maps=previous_tier_maps,
@@ -140,41 +141,24 @@ def main():
     # Check sparsity
     print("*"*30)
     sparsity_ratio = check_sparsity(model)
-    print(f"Sparsity sanity check: {sparsity_ratio:.4f}")
+    print(f"sparsity sanity check {sparsity_ratio:.4f}")
     print("*"*30)
-    
-    # Evaluate perplexity
-    ppl_test = eval_ppl(args, model, tokenizer, device)
-    print(f"WikiText perplexity: {ppl_test:.4f}")
 
-    # Save results
-    if args.save:
-        if not os.path.exists(args.save):
-            os.makedirs(args.save)
-        
-        # Save log
-        save_filepath = os.path.join(args.save, f"log_iter{args.iteration}.txt")
-        with open(save_filepath, "w") as f:
-            print(f"iteration\tdense\tmid_2_4\ttopk\tsparsity\tppl", file=f, flush=True)
-            print(f"{args.iteration}\t{current_config['dense']:.2f}\t{current_config['mid_2_4']:.2f}\t{current_config['topk']:.2f}\t{sparsity_ratio:.4f}\t{ppl_test:.4f}", file=f, flush=True)
-        
-        # Save tier maps
-        tier_maps_path = os.path.join(args.save, f"tier_maps_iter{args.iteration}.pt")
-        torch.save(tier_maps, tier_maps_path)
-        print(f"\nTier maps saved to: {tier_maps_path}")
+    # Save tier maps
+    if args.save is not None:
+        tier_map_path = os.path.join(args.save, f"tier_maps_iter{args.iteration}.pt")
+        save_tier_map(tier_maps, tier_map_path)
+        print(f"Tier maps saved to {tier_map_path}")
 
     # Save model
-    if args.save_model:
+    if args.save_model is not None:
+        print(f"Saving pruned model to {args.save_model}")
         model.save_pretrained(args.save_model)
         tokenizer.save_pretrained(args.save_model)
-        print(f"Model saved to: {args.save_model}")
-    
-    print("\n" + "="*80)
-    print(f"Iteration {args.iteration} Complete!")
+        print("Model saved successfully!")
+
     print("="*80)
-    print(f"Next steps:")
-    print(f"  1. Finetune the model for {current_config['epochs']} epochs")
-    print(f"  2. Run iteration {args.iteration + 1} with --previous_tier_maps {tier_maps_path}")
+    print(f"Iteration {args.iteration} pruning complete!")
     print("="*80)
 
 

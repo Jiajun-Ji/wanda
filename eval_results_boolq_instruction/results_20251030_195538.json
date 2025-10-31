@@ -1,0 +1,7 @@
+{
+  "accuracy": 0.0,
+  "correct": 0,
+  "total": 3270,
+  "eval_time_seconds": 510.3068947792053,
+  "model_path": "out/progressive_three_tier/iter5/boolq_finetuned"
+}

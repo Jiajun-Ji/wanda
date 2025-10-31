@@ -1968,7 +1968,8 @@ def prune_wanda_progressive_three_tier(
     previous_tier_maps=None,
     block_size=16,
     topk_per_block=10,
-    log_file=None
+    log_file=None,
+    calib_dataset='wikitext2'
 ):
     """
     Progressive three-tier pruning with Wanda method.
@@ -1988,6 +1989,7 @@ def prune_wanda_progressive_three_tier(
         block_size: Block size
         topk_per_block: Number of weights to keep in topk blocks
         log_file: Path to log file (optional)
+        calib_dataset: Calibration dataset ('wikitext2' or 'c4')
 
     Returns:
         tier_maps: Dict mapping layer names to tier maps
@@ -2018,8 +2020,8 @@ def prune_wanda_progressive_three_tier(
     log_print("="*80)
 
     # Load calibration data
-    log_print("\nLoading calibration data (WikiText2)...")
-    dataloader, _ = get_loaders("wikitext2", nsamples=args.nsamples, seed=args.seed, seqlen=model.seqlen, tokenizer=tokenizer)
+    log_print(f"\nLoading calibration data ({calib_dataset.upper()})...")
+    dataloader, _ = get_loaders(calib_dataset, nsamples=args.nsamples, seed=args.seed, seqlen=model.seqlen, tokenizer=tokenizer)
     log_print("Dataset loading complete\n")
 
     with torch.no_grad():

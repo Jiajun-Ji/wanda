@@ -13,8 +13,15 @@ def find_layers(module, layers=[nn.Linear], name=''):
     return res
 
 def fix_grad_nan_inf(model):
-    layers = model.model.layers
-    count = 0 
+    # Support both Llama and OPT model architectures
+    if hasattr(model.model, 'layers'):
+        layers = model.model.layers
+    elif hasattr(model.model, 'decoder'):
+        layers = model.model.decoder.layers
+    else:
+        raise ValueError(f"Unsupported model architecture: {type(model.model)}")
+
+    count = 0
     total_params = 0
     for m in model.parameters():
     	if m.requires_grad:
@@ -32,7 +39,16 @@ def mask_grad(model):
         # Single-GPU: model is the actual model
         actual_model = model
 
-    layers = actual_model.model.layers
+    # Support both Llama and OPT model architectures
+    if hasattr(actual_model.model, 'layers'):
+        # Llama architecture
+        layers = actual_model.model.layers
+    elif hasattr(actual_model.model, 'decoder'):
+        # OPT architecture
+        layers = actual_model.model.decoder.layers
+    else:
+        raise ValueError(f"Unsupported model architecture: {type(actual_model.model)}")
+
     count = 0
     total_params = 0
     for i in range(len(layers)):
@@ -58,7 +74,16 @@ def check_sparsity(model):
     use_cache = actual_model.config.use_cache
     actual_model.config.use_cache = False
 
-    layers = actual_model.model.layers
+    # Support both Llama and OPT model architectures
+    if hasattr(actual_model.model, 'layers'):
+        # Llama architecture
+        layers = actual_model.model.layers
+    elif hasattr(actual_model.model, 'decoder'):
+        # OPT architecture
+        layers = actual_model.model.decoder.layers
+    else:
+        raise ValueError(f"Unsupported model architecture: {type(actual_model.model)}")
+
     count = 0
     total_params = 0
     for i in range(len(layers)):

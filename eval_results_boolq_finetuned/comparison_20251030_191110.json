@@ -1,0 +1,37 @@
+{
+  "original": {
+    "model_name": "Original Model",
+    "model_path": "/mnt/sdb/llm_models/Llama-2-7b-hf",
+    "sparsity": 1.355001963482002e-06,
+    "wikitext_ppl": 5.1166839599609375,
+    "eval_time_seconds": 160.71591114997864,
+    "tasks": {
+      "boolq": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "boolq",
+          "acc,none": 0.7770642201834862,
+          "acc_stderr,none": 0.007279656444410392
+        }
+      }
+    }
+  },
+  "pruned": {
+    "model_name": "Pruned & Finetuned Model",
+    "model_path": "out/progressive_three_tier/iter5/boolq_finetuned",
+    "sparsity": 0.41313106084117,
+    "wikitext_ppl": NaN,
+    "eval_time_seconds": 157.39369559288025,
+    "tasks": {
+      "boolq": {
+        "accuracy": null,
+        "full_results": {
+          "alias": "boolq",
+          "acc,none": 0.3782874617737003,
+          "acc_stderr,none": 0.008482001133931
+        }
+      }
+    }
+  },
+  "timestamp": "20251030_191110"
+}
